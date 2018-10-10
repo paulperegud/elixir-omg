@@ -1,4 +1,7 @@
-# Full Installation
+# 1. Installation via Vagrant
+Refer to https://github.com/omisego/xomg-vagrant.
+
+# 2. Full installation
 
 **NOTE**: Currently the child chain server and watcher are bundled within a single umbrella app.
 
@@ -7,34 +10,13 @@ Only **Linux** platforms are supported now. These instructions have been tested 
 ## Prerequisites
 * **Erlang OTP** `>=20` (check with `elixir --version`)
 * **Elixir** `>=1.6` (check with `elixir --version`)
-* **solc** `~>0.4` (check with `solc --version`)
-
-### Optional prerequisites
-* **`httpie`** - to run HTTP requests from `docs/demoxx.md` demos
+* **Python** `>=3.5, <4` (check with `python --version`)
+* **solc** `>=0.4.24` (check with `solc --version`)
 
 ## Install prerequisite packages
-
 ```
 sudo apt-get update
-sudo apt-get -y install \
-  autoconf \
-  build-essential \
-  cmake \
-  git \
-  libgmp3-dev \
-  libsecp256k1-dev \
-  libssl-dev \
-  libtool \
-  wget
-```
-
-## Install PostgreSQL
-
-```
-sudo apt-get install postgresql postgresql-contrib
-sudo -u postgres createuser omisego_dev
-sudo -u postgres psql -c "alter user omisego_dev with encrypted password 'omisego_dev'"
-sudo -u postgres psql -c "alter user omisego_dev CREATEDB"
+sudo apt-get -y install build-essential autoconf libtool libgmp-dev libssl-dev wget git
 ```
 
 ## Install Erlang
@@ -52,6 +34,7 @@ sudo apt-get install -y esl-erlang
 sudo apt-get -y install elixir
 ```
 
+
 ## Install Geth
 ```
 sudo apt-get install -y software-properties-common
@@ -60,23 +43,22 @@ sudo apt-get update
 sudo apt-get -y install geth
 ```
 
-## Installing Parity
-Parity is supported. To use it, download the [lastest stable
-binary](https://www.parity.io/ethereum/#download) and put it into your PATH.
-
+## Install pip3
 ```
-wget https://releases.parity.io/ethereum/v2.4.6/x86_64-unknown-linux-gnu/parity
-chmod +x parity
-sudo mv parity /usr/bin/
+sudo apt-get -y install python3-pip
+```
+
+## (optional) Install virtualenv
+This step is optional but recommended to isolate the python environment. [Ref](https://gist.github.com/IamAdiSri/a379c36b70044725a85a1216e7ee9a46)
+```
+sudo pip3 install virtualenv
+virtualenv DEV
+source DEV/bin/activate
 ```
 
 ## Install solc
 ```
 sudo apt-get install libssl-dev solc
-wget https://github.com/ethereum/solidity/releases/download/v0.4.26/solidity-ubuntu-trusty.zip
-unzip solidity-ubuntu-trusty.zip
-sudo install solc /usr/local/bin
-rm solc lllc solidity-ubuntu-trusty.zip
 ```
 
 ## Install hex and rebar
@@ -89,11 +71,19 @@ mix do local.hex --force, local.rebar --force
 git clone https://github.com/omisego/elixir-omg
 ```
 
+## Install contract building machinery
+[Ref](../README.md#contracts)
+```
+# contract building requires character encoding to be set
+export LC_ALL=C.UTF-8
+export LANG=C.UTF-8
+pip3 install -r contracts/requirements.txt
+```
+
 ## Build
 ```
 cd elixir-omg
 mix deps.get
-mix deps.compile
 ```
 
 ## Check this works!
