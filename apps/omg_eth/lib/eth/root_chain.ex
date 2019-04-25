@@ -30,11 +30,16 @@ defmodule OMG.Eth.RootChain do
 
   @type optional_addr_t() :: <<_::160>> | nil
 
+  @gas_add_token 500_000
   @gas_start_exit 1_000_000
   @gas_challenge_exit 300_000
   @gas_deposit 180_000
   @gas_deposit_from 250_000
   @gas_init 1_000_000
+  @gas_start_in_flight_exit 2_000_000
+  @gas_challenge_in_flight_exit_not_canonical 1_000_000
+  @gas_respond_to_non_canonical_challenge 1_000_000
+  @gas_process_exits 500_000
   @standard_exit_bond 31_415_926_535
   @piggyback_bond 31_415_926_535
 
@@ -144,7 +149,11 @@ defmodule OMG.Eth.RootChain do
         contract \\ nil,
         opts \\ []
       ) do
-    defaults = @tx_defaults |> Keyword.put(:value, @standard_exit_bond)
+    defaults =
+      @tx_defaults
+      |> Keyword.put(:value, @standard_exit_bond)
+      |> Keyword.put(:gas, @gas_start_in_flight_exit)
+
     opts = defaults |> Keyword.merge(opts)
 
     contract = contract || from_hex(Application.fetch_env!(:omg_eth, :contract_addr))
@@ -166,7 +175,7 @@ defmodule OMG.Eth.RootChain do
         contract \\ nil,
         opts \\ []
       ) do
-    defaults = @tx_defaults
+    defaults = @tx_defaults |> Keyword.put(:gas, @gas_challenge_in_flight_exit_not_canonical)
     opts = defaults |> Keyword.merge(opts)
 
     contract = contract || from_hex(Application.fetch_env!(:omg_eth, :contract_addr))
@@ -193,7 +202,7 @@ defmodule OMG.Eth.RootChain do
         contract \\ nil,
         opts \\ []
       ) do
-    defaults = @tx_defaults
+    defaults = @tx_defaults |> Keyword.put(:gas, @gas_respond_to_non_canonical_challenge)
     opts = defaults |> Keyword.merge(opts)
 
     contract = contract || from_hex(Application.fetch_env!(:omg_eth, :contract_addr))
@@ -201,6 +210,16 @@ defmodule OMG.Eth.RootChain do
 
     args = [in_flight_tx, in_flight_tx_pos, in_flight_tx_inclusion_proof]
 
+    Eth.contract_transact(from, contract, signature, args, opts)
+  end
+
+  def process_exits(token, top_utxo_pos, exits_to_process, from, contract \\ nil, opts \\ []) do
+    defaults = @tx_defaults |> Keyword.put(:gas, @gas_process_exits)
+    opts = defaults |> Keyword.merge(opts)
+
+    contract = contract || from_hex(Application.fetch_env!(:omg_eth, :contract_addr))
+    signature = "processExits(address,uint256,uint256)"
+    args = [token, top_utxo_pos, exits_to_process]
     Eth.contract_transact(from, contract, signature, args, opts)
   end
 
