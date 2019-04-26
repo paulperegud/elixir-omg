@@ -143,6 +143,11 @@ defmodule OMG.API.TestHelper do
     Transaction.Signed.encode(signed_tx)
   end
 
+  def create_encoded(inputs, outputs) do
+    signed_tx = create_signed(inputs, outputs)
+    Transaction.Signed.encode(signed_tx)
+  end
+
   @spec write_fee_file(%{Crypto.address_t() => non_neg_integer}) :: {:ok, binary}
   def write_fee_file(map) do
     {:ok, json} =
