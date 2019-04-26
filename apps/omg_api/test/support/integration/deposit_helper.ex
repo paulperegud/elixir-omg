@@ -37,7 +37,6 @@ defmodule OMG.API.Integration.DepositHelper do
   def deposit_to_child_chain(to, value, token_addr) when is_binary(token_addr) and byte_size(token_addr) == 20 do
     contract_addr = Eth.Encoding.from_hex(Application.fetch_env!(:omg_eth, :contract_addr))
 
-    to |> Eth.Token.mint(value, token_addr) |> Eth.DevHelpers.transact_sync!()
     to |> Eth.Token.approve(contract_addr, value, token_addr) |> Eth.DevHelpers.transact_sync!()
 
     {:ok, receipt} =
