@@ -63,12 +63,12 @@ defmodule OMG.API.Integration.Fixtures do
     deposit(stable_alice, token)
   end
 
-  defp deposit(alice, token) do
+  defp deposit(alice, token_addr) do
     {:ok, _} = Eth.DevHelpers.import_unlock_fund(alice)
 
     deposit_blknum = deposit_to_child_chain(alice.addr, 10)
-    Eth.Token.mint(alice.addr, value, token_addr) |> Eth.DevHelpers.transact_sync!()
-    token_deposit_blknum = deposit_to_child_chain(alice.addr, 10, token)
+    Eth.Token.mint(alice.addr, 10, token_addr) |> Eth.DevHelpers.transact_sync!()
+    token_deposit_blknum = deposit_to_child_chain(alice.addr, 10, token_addr)
 
     {deposit_blknum, token_deposit_blknum}
   end

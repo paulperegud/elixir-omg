@@ -108,13 +108,11 @@ defmodule OMG.Eth.RootChain do
     Eth.contract_transact(from, contract, "depositFrom(bytes)", [tx], opts)
   end
 
-  def add_token(token, contract \\ nil, opts \\ []) do
-    opts = @tx_defaults |> Keyword.merge(opts)
+  def add_token(token, from, contract \\ nil, opts \\ []) do
+    opts = @tx_defaults |> Keyword.put(:gas, @gas_add_token) |> Keyword.merge(opts)
 
     contract = contract || from_hex(Application.fetch_env!(:omg_eth, :contract_addr))
-    {:ok, [from | _]} = Ethereumex.HttpClient.eth_accounts()
-
-    Eth.contract_transact(from_hex(from), contract, "addToken(address)", [token], opts)
+    Eth.contract_transact(from, contract, "addToken(address)", [token], opts)
   end
 
   def challenge_exit(exit_id, challenge_tx, input_index, challenge_tx_sig, from, contract \\ nil, opts \\ []) do
