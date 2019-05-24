@@ -22,6 +22,8 @@ defmodule OMG.Eth.Fixtures do
 
   import Eth.Encoding
 
+  @lots 10_000_000_000_000_000_000
+
   deffixture eth_node do
     DeferredConfig.populate(:omg_eth)
     {:ok, exit_fn} = Eth.DevNode.start()
@@ -37,12 +39,14 @@ defmodule OMG.Eth.Fixtures do
 
   deffixture token(root_chain_contract_config) do
     :ok = root_chain_contract_config
+    DeferredConfig.populate(:omg_eth)
 
     root_path = "../../"
-    {:ok, [addr | _]} = Ethereumex.HttpClient.eth_accounts()
 
-    DeferredConfig.populate(:omg_eth)
-    {:ok, _, token_addr} = Eth.Deployer.create_new(OMG.Eth.Token, root_path, from_hex(addr))
+    {:ok, [faucet_address | _]} = Ethereumex.HttpClient.eth_accounts()
+    faucet_address = from_hex(faucet_address)
+    {:ok, _, token_addr} = Eth.Deployer.create_new(OMG.Eth.Token, root_path, faucet_address)
+    {:ok, _} = Eth.Token.mint(faucet_address, @lots, token_addr) |> Eth.DevHelpers.transact_sync!()
 
     # ensuring that the root chain contract handles token_addr
     {:ok, false} = Eth.RootChain.has_token(token_addr)

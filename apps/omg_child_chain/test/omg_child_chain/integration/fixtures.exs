@@ -22,6 +22,7 @@ defmodule OMG.ChildChain.Integration.Fixtures do
   alias OMG.TestHelper
 
   import OMG.Integration.DepositHelper
+  import OMG.Eth.Encoding, only: [from_hex: 1]
 
   deffixture fee_file(token) do
     # ensuring that the child chain handles the token (esp. fee-wise)
@@ -70,7 +71,11 @@ defmodule OMG.ChildChain.Integration.Fixtures do
     {:ok, _} = Eth.DevHelpers.import_unlock_fund(alice)
 
     deposit_blknum = deposit_to_child_chain(alice.addr, some_value)
-    {:ok, _} = Eth.Token.mint(alice.addr, some_value, token_addr) |> Eth.DevHelpers.transact_sync!()
+
+    {:ok, [faucet_address | _]} = Ethereumex.HttpClient.eth_accounts()
+    faucet_address = from_hex(faucet_address)
+
+    {:ok, _} = Eth.Token.transfer(faucet_address, alice.addr, some_value, token_addr) |> Eth.DevHelpers.transact_sync!()
     token_deposit_blknum = deposit_to_child_chain(alice.addr, some_value, token_addr)
 
     {deposit_blknum, token_deposit_blknum}
