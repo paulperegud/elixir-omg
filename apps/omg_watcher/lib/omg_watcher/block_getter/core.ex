@@ -75,6 +75,7 @@ defmodule OMG.Watcher.BlockGetter.Core do
     :num_of_highest_block_being_downloaded,
     :number_of_blocks_being_downloaded,
     :last_block_persisted_from_prev_run,
+    :blocks_to_apply,
     :unapplied_blocks,
     :potential_block_withholdings,
     :config,
@@ -88,6 +89,7 @@ defmodule OMG.Watcher.BlockGetter.Core do
           num_of_highest_block_being_downloaded: non_neg_integer,
           number_of_blocks_being_downloaded: non_neg_integer,
           last_block_persisted_from_prev_run: non_neg_integer,
+          blocks_to_apply: list(BlockApplication.t()),
           unapplied_blocks: %{non_neg_integer => BlockApplication.t()},
           potential_block_withholdings: %{
             non_neg_integer => PotentialWithholding.t()
@@ -148,6 +150,7 @@ defmodule OMG.Watcher.BlockGetter.Core do
           num_of_highest_block_being_downloaded: block_number,
           number_of_blocks_being_downloaded: 0,
           last_block_persisted_from_prev_run: last_persisted_block,
+          blocks_to_apply: [],
           unapplied_blocks: %{},
           potential_block_withholdings: %{},
           config:
@@ -184,21 +187,27 @@ defmodule OMG.Watcher.BlockGetter.Core do
   @doc """
   Marks that child chain block published on `blk_eth_height` was processed
   """
-  @spec apply_block(t(), BlockApplication.t()) :: {t(), non_neg_integer(), list()}
-  def apply_block(%__MODULE__{} = state, %BlockApplication{
-        number: blknum,
-        eth_height: eth_height,
-        eth_height_done: eth_height_done
-      }) do
+  @spec apply_block(t()) :: {t(), non_neg_integer(), list(), BlockApplication.t()}
+  def apply_block(%__MODULE__{blocks_to_apply: [block_to_apply | rest_to_apply]} = state) do
+    %BlockApplication{
+      number: blknum,
+      eth_height: eth_height,
+      eth_height_done: eth_height_done
+    } = block_to_apply
+
     _ = Logger.debug("\##{inspect(blknum)}, from: #{inspect(eth_height)}, eth height done: #{inspect(eth_height_done)}")
+
+    should_continue = !Enum.empty?(rest_to_apply)
+    state = %{state | blocks_to_apply: rest_to_apply}
 
     if eth_height_done do
       # final - we need to mark this eth height as processed
+      # FIXME: dry this a little somehow?
       state = %{state | synced_height: eth_height}
-      {state, eth_height, [{:put, :last_block_getter_eth_height, eth_height}]}
+      {state, eth_height, [{:put, :last_block_getter_eth_height, eth_height}], block_to_apply, should_continue}
     else
       # not final - this applied child block doesn't wrap up any eth height
-      {state, state.synced_height, []}
+      {state, state.synced_height, [], block_to_apply, should_continue}
     end
   end
 
@@ -221,9 +230,9 @@ defmodule OMG.Watcher.BlockGetter.Core do
   That is the longest continuous range of blocks downloaded from child chain,
   contained in `block_submitted_events`, published on ethereum height not exceeding `coordinator_height` and not pushed to state before.
   """
-  @spec get_blocks_to_apply(t(), list(), non_neg_integer()) ::
-          {list(BlockApplication.t()), non_neg_integer(), list(), t()}
-  def get_blocks_to_apply(
+  @spec update_blocks_to_apply(t(), list(), non_neg_integer()) ::
+          {boolean(), non_neg_integer(), list(), t()}
+  def update_blocks_to_apply(
         %__MODULE__{last_applied_block: last_applied} = state,
         block_submitted_events,
         coordinator_height
@@ -231,28 +240,28 @@ defmodule OMG.Watcher.BlockGetter.Core do
     # this ensures that we don't take submissions of already applied blocks into account **at all**
     filtered_submissions = block_submitted_events |> Enum.filter(fn %{blknum: blknum} -> blknum > last_applied end)
 
-    do_get_blocks_to_apply(state, filtered_submissions, coordinator_height)
+    do_update_blocks_to_apply(state, filtered_submissions, coordinator_height)
   end
 
   # height served as syncable from the `OMG.RootChainCoordinator` is older, nothing we can do about it, so noop
-  defp do_get_blocks_to_apply(
+  defp do_update_blocks_to_apply(
          %__MODULE__{synced_height: synced_height} = state,
          _block_submitted_events,
          coordinator_height
        )
        when coordinator_height <= synced_height do
-    {[], synced_height, [], state}
+    {false, synced_height, [], state}
   end
 
   # there are no **non-applied** submissions in the prescribed range of eth-blocks, so let's as much as we can
-  defp do_get_blocks_to_apply(%__MODULE__{} = state, [], coordinator_height) do
+  defp do_update_blocks_to_apply(%__MODULE__{} = state, [], coordinator_height) do
     db_updates = [{:put, :last_block_getter_eth_height, coordinator_height}]
-    {[], coordinator_height, db_updates, %{state | synced_height: coordinator_height}}
+    {false, coordinator_height, db_updates, %{state | synced_height: coordinator_height}}
   end
 
   # there are blocks to apply, so let's schedule that. This clause defers advancing the synced_height until apply_block
-  defp do_get_blocks_to_apply(
-         %__MODULE__{unapplied_blocks: blocks, config: config} = state,
+  defp do_update_blocks_to_apply(
+         %__MODULE__{unapplied_blocks: blocks, config: config, blocks_to_apply: old_to_apply} = state,
          block_submissions,
          _coordinator_height
        ) do
@@ -271,7 +280,7 @@ defmodule OMG.Watcher.BlockGetter.Core do
     blocks_to_keep = Map.drop(blocks, blknums_to_apply)
     last_applied_block = List.last([state.last_applied_block] ++ blknums_to_apply)
 
-    blocks_to_apply =
+    new_to_apply =
       blknums_to_apply
       |> Enum.map(fn blknum ->
         Map.get(blocks, blknum)
@@ -280,11 +289,14 @@ defmodule OMG.Watcher.BlockGetter.Core do
         |> struct!()
       end)
 
-    {blocks_to_apply, state.synced_height, [],
+    blocks_to_apply = old_to_apply ++ new_to_apply
+
+    {!Enum.empty?(blocks_to_apply), state.synced_height, [],
      %{
        state
        | unapplied_blocks: blocks_to_keep,
-         last_applied_block: last_applied_block
+         last_applied_block: last_applied_block,
+         blocks_to_apply: blocks_to_apply
      }}
   end
 

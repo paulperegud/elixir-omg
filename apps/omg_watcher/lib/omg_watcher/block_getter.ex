@@ -102,33 +102,29 @@ defmodule OMG.Watcher.BlockGetter do
   end
 
   @decorate measure_start()
-  def handle_cast(
-        {:apply_block,
-         %BlockApplication{
-           transactions: transactions,
-           number: blknum,
-           eth_height: eth_height
-         } = to_apply},
-        state
-      ) do
+  def handle_cast(:apply_block, state) do
+    {state, synced_height, db_updates, to_apply, should_continue} = Core.apply_block(state)
+    %BlockApplication{transactions: transactions, number: blknum, eth_height: eth_height} = to_apply
+
     with {:ok, _} <- Core.chain_ok(state),
          tx_exec_results = for(tx <- transactions, do: OMG.State.exec(tx, :ignore)),
          {:ok, state} <- Core.validate_executions(tx_exec_results, to_apply, state) do
-      _ =
-        to_apply
-        |> Core.ensure_block_imported_once(state)
-        |> Enum.each(&DB.Transaction.update_with/1)
+      # Process.sleep(2000)
+
+      # _ =
+      #   to_apply
+      #   |> Core.ensure_block_imported_once(state)
+      #   |> Enum.each(&DB.Transaction.update_with/1)
 
       state = run_block_download_task(state)
 
       {:ok, db_updates_from_state} = OMG.State.close_block(eth_height)
 
-      {state, synced_height, db_updates} = Core.apply_block(state, to_apply)
-
       _ = Logger.debug("Synced height update: #{inspect(db_updates)}")
 
       :ok = OMG.DB.multi_update(db_updates ++ db_updates_from_state)
       :ok = check_in_to_coordinator(synced_height)
+      if should_continue, do: GenServer.cast(__MODULE__, :apply_block)
 
       exit_processor_results = ExitProcessor.check_validity()
       state = Core.consider_exits(state, exit_processor_results)
@@ -212,12 +208,12 @@ defmodule OMG.Watcher.BlockGetter do
 
       _ = Logger.debug("Submitted #{length(submissions)} plasma blocks on Ethereum block range #{inspect(block_range)}")
 
-      {blocks_to_apply, synced_height, db_updates, state} =
-        Core.get_blocks_to_apply(state, submissions, next_synced_height)
+      {should_apply_block, synced_height, db_updates, state} =
+        Core.update_blocks_to_apply(state, submissions, next_synced_height)
 
-      _ = Logger.debug("Synced height is #{inspect(synced_height)}, got #{length(blocks_to_apply)} blocks to apply")
+      _ = Logger.debug("Synced height is #{inspect(synced_height)}, should_apply_block? #{inspect(should_apply_block)}")
 
-      Enum.each(blocks_to_apply, &GenServer.cast(__MODULE__, {:apply_block, &1}))
+      if should_apply_block, do: GenServer.cast(__MODULE__, :apply_block)
 
       :ok = OMG.DB.multi_update(db_updates)
       :ok = check_in_to_coordinator(synced_height)
