@@ -35,23 +35,28 @@ defmodule OMG.Watcher.BlockGetter do
   alias OMG.Watcher.ExitProcessor
   alias OMG.Watcher.Recorder
 
-  use GenServer
+  use GenStage
   use OMG.Utils.LoggerExt
   use OMG.Utils.Metrics
 
   def get_events do
-    GenServer.call(__MODULE__, :get_events)
+    GenStage.call(__MODULE__, :get_events)
   end
 
   def start_link(_args) do
-    GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
+    GenStage.start_link(__MODULE__, :ok, name: __MODULE__)
   end
+
+  # FIXME: swapped out for a dumb-simple `init` to wait till handle_continue in GenStage lands
+  # ref: https://github.com/elixir-lang/gen_stage/issues/227 & https://github.com/elixir-lang/gen_stage/pull/234
+  #
+  # def init(_opts) do
+  #   {:producer_consumer, %{}, {:continue, :setup}}
+  # end
+  #
+  # def handle_continue(:setup, %{}) do
 
   def init(_opts) do
-    {:ok, %{}, {:continue, :setup}}
-  end
-
-  def handle_continue(:setup, %{}) do
     {:ok, deployment_height} = Eth.RootChain.get_root_deployment_height()
     {:ok, last_synced_height} = OMG.DB.get_single_value(:last_block_getter_eth_height)
     synced_height = max(deployment_height, last_synced_height)
@@ -94,26 +99,28 @@ defmodule OMG.Watcher.BlockGetter do
 
     _ = Logger.info("Started #{inspect(__MODULE__)}, synced_height: #{inspect(synced_height)}")
 
-    {:noreply, state}
+    {:producer_consumer, state, subscribe_to: [self()]}
   end
 
+  # FIXME: see handle_continue FIXME above
+  #   {:noreply, state}
+  # end
+
   def handle_call(:get_events, _from, state) do
-    {:reply, Core.chain_ok(state), state}
+    {:reply, Core.chain_ok(state), [], state}
   end
 
   @decorate measure_start()
-  def handle_cast(
-        {:apply_block,
-         %BlockApplication{
-           transactions: transactions,
-           number: blknum,
-           eth_height: eth_height
-         } = to_apply},
+  def handle_events(
+        [%BlockApplication{transactions: transactions, number: blknum, eth_height: eth_height} = to_apply | rest],
+        _from,
         state
       ) do
     with {:ok, _} <- Core.chain_ok(state),
          tx_exec_results = for(tx <- transactions, do: OMG.State.exec(tx, :ignore)),
          {:ok, state} <- Core.validate_executions(tx_exec_results, to_apply, state) do
+      Process.sleep(2000)
+
       _ =
         to_apply
         |> Core.ensure_block_imported_once(state)
@@ -139,15 +146,15 @@ defmodule OMG.Watcher.BlockGetter do
             "with #{inspect(length(transactions))} txs"
         )
 
-      {:noreply, state}
+      {:noreply, rest, state}
     else
       {{:error, _} = error, new_state} ->
         _ = Logger.error("Invalid block #{inspect(blknum)}, because of #{inspect(error)}")
-        {:noreply, new_state}
+        {:noreply, [], new_state}
 
       {:error, _} = error ->
         _ = Logger.warn("Chain already invalid before applying block #{inspect(blknum)} because of #{inspect(error)}")
-        {:noreply, state}
+        {:noreply, [], state}
     end
   end
 
@@ -157,12 +164,12 @@ defmodule OMG.Watcher.BlockGetter do
           | {reference(), {:downloaded_block, {:error, Core.block_error()}}}
           | {:DOWN, reference(), :process, pid, :normal},
           Core.t()
-        ) :: {:noreply, Core.t()} | {:stop, :normal, Core.t()}
+        ) :: {:noreply, [], Core.t()} | {:stop, :normal, Core.t()}
   def handle_info(msg, state)
 
   def handle_info(:producer, state), do: do_producer(state)
   def handle_info({_ref, {:downloaded_block, response}}, state), do: do_downloaded_block(response, state)
-  def handle_info({:DOWN, _ref, :process, _pid, :normal} = _process, state), do: {:noreply, state}
+  def handle_info({:DOWN, _ref, :process, _pid, :normal} = _process, state), do: {:noreply, [], state}
   def handle_info(:sync, state), do: do_sync(state)
 
   @decorate measure_start()
@@ -170,11 +177,11 @@ defmodule OMG.Watcher.BlockGetter do
     with {:ok, _} <- Core.chain_ok(state) do
       new_state = run_block_download_task(state)
       {:ok, _} = schedule_producer()
-      {:noreply, new_state}
+      {:noreply, [], new_state}
     else
       {:error, _} = error ->
         _ = Logger.warn("Chain invalid when trying to download blocks, because of #{inspect(error)}, won't try again")
-        {:noreply, state}
+        {:noreply, [], state}
     end
   end
 
@@ -184,12 +191,12 @@ defmodule OMG.Watcher.BlockGetter do
 
     with {:ok, state} <- Core.handle_downloaded_block(state, response) do
       state = run_block_download_task(state)
-      {:noreply, state}
+      {:noreply, [], state}
     else
       {{:error, _} = error, state} ->
         _ = Logger.error("Error while handling downloaded block because of #{inspect(error)}")
 
-        {:noreply, state}
+        {:noreply, [], state}
     end
   end
 
@@ -217,21 +224,19 @@ defmodule OMG.Watcher.BlockGetter do
 
       _ = Logger.debug("Synced height is #{inspect(synced_height)}, got #{length(blocks_to_apply)} blocks to apply")
 
-      Enum.each(blocks_to_apply, &GenServer.cast(__MODULE__, {:apply_block, &1}))
-
       :ok = OMG.DB.multi_update(db_updates)
       :ok = check_in_to_coordinator(synced_height)
       {:ok, _} = schedule_sync_height()
 
-      {:noreply, state}
+      {:noreply, blocks_to_apply, state}
     else
       :nosync ->
         :ok = check_in_to_coordinator(state.synced_height)
-        {:noreply, state}
+        {:noreply, [], state}
 
       {:error, _} = error ->
         _ = Logger.warn("Chain invalid when trying to sync, because of #{inspect(error)}, won't try again")
-        {:noreply, state}
+        {:noreply, [], state}
     end
   end
 

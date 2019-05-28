@@ -44,12 +44,7 @@ defmodule OMG.Watcher.SyncSupervisor do
 
   defp monitor_children do
     [
-      %{
-        id: OMG.Watcher.BlockGetter.Supervisor,
-        start: {OMG.Watcher.BlockGetter.Supervisor, :start_link, []},
-        restart: :permanent,
-        type: :supervisor
-      },
+      {Watcher.ExitProcessor, []},
       {OMG.RootChainCoordinator, CoordinatorSetup.coordinator_setup()},
       EthereumEventListener.prepare_child(
         service_name: :depositor,
@@ -67,7 +62,6 @@ defmodule OMG.Watcher.SyncSupervisor do
           {:ok, []}
         end
       ),
-      {Watcher.ExitProcessor, []},
       EthereumEventListener.prepare_child(
         service_name: :exit_processor,
         synced_height_update_key: :last_exit_processor_eth_height,
@@ -132,7 +126,13 @@ defmodule OMG.Watcher.SyncSupervisor do
         synced_height_update_key: :last_ife_exit_finalizer_eth_height,
         get_events_callback: &Eth.RootChain.get_in_flight_exit_finalizations/2,
         process_events_callback: &Watcher.ExitProcessor.finalize_in_flight_exits/1
-      )
+      ),
+      %{
+        id: OMG.Watcher.BlockGetter.Supervisor,
+        start: {OMG.Watcher.BlockGetter.Supervisor, :start_link, []},
+        restart: :permanent,
+        type: :supervisor
+      }
     ]
   end
 end

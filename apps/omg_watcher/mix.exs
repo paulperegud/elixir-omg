@@ -40,6 +40,7 @@ defmodule OMG.Watcher.Mixfile do
       {:deferred_config, "~> 0.1.1"},
       {:cors_plug, "~> 2.0"},
       {:appsignal, "~> 1.0"},
+      {:gen_stage, "~> 0.14"},
       # UMBRELLA
       {:omg, in_umbrella: true},
       {:omg_status, in_umbrella: true},

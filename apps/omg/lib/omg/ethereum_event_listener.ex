@@ -66,7 +66,7 @@ defmodule OMG.EthereumEventListener do
         get_events_callback: get_events_callback,
         process_events_callback: process_events_callback
       }) do
-    _ = Logger.info("Starting #{inspect(__MODULE__)} for #{service_name}.")
+    _ = Logger.debug("Starting #{inspect(__MODULE__)} for #{service_name}.")
     {:ok, contract_deployment_height} = OMG.Eth.RootChain.get_root_deployment_height()
     {:ok, last_event_block_height} = OMG.DB.get_single_value(update_key)
     # we don't need to ever look at earlier than contract deployment
