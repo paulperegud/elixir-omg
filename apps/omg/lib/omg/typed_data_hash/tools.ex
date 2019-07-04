@@ -20,12 +20,13 @@ defmodule OMG.TypedDataHash.Tools do
 
   alias OMG.Crypto
   alias OMG.State.Transaction
+  alias OMG.TypedDataHash.Types
   alias OMG.Utxo
 
   require Utxo
 
   # FIXME: chainId added here, see below
-  @domain_encoded_type "EIP712Domain(string name,string version,address verifyingContract,bytes32 salt,uint256 chainId)"
+  @domain_encoded_type "EIP712Domain(string name,string version,address verifyingContract,bytes32 salt)"
   @domain_type_hash Crypto.hash(@domain_encoded_type)
 
   @transaction_encoded_type "Transaction(" <>
@@ -43,19 +44,30 @@ defmodule OMG.TypedDataHash.Tools do
   Computes Domain Separator `hashStruct(eip712Domain)`,
   @see: http://eips.ethereum.org/EIPS/eip-712#definition-of-domainseparator
   """
-  @spec domain_separator(binary(), binary(), Crypto.address_t(), Crypto.hash_t()) ::
-          Crypto.hash_t()
-  def domain_separator(name, version, verifying_contract, salt) do
-    [
-      @domain_type_hash,
-      Crypto.hash(name),
-      Crypto.hash(version),
-      ABI.TypeEncoder.encode_raw([verifying_contract], [:address]),
-      ABI.TypeEncoder.encode_raw([salt], [{:bytes, 32}]),
-      # FIXME: chainID added, while we don't want it here. Without chainId, parity wouldn't sign for us
-      #        c.f. https://github.com/paritytech/parity-ethereum/issues/10832
-      ABI.TypeEncoder.encode_raw([1], [{:uint, 256}])
-    ]
+  @spec domain_separator(Types.eip712_domain_t(), Crypto.hash_t()) :: Crypto.hash_t()
+  def domain_separator(
+        %{
+          name: name,
+          version: version,
+          verifyingContract: verifying_contract,
+          salt: salt,
+          chainId: chain_id
+        },
+        domain_type_hash \\ @domain_type_hash
+      ) do
+    # FIXME: chainID added, while we don't want it here. Without chainId, parity wouldn't sign for us
+    #        c.f. https://github.com/paritytech/parity-ethereum/issues/10832
+    ([
+       domain_type_hash,
+       Crypto.hash(name),
+       Crypto.hash(version),
+       ABI.TypeEncoder.encode_raw([verifying_contract], [:address]),
+       ABI.TypeEncoder.encode_raw([salt], [{:bytes, 32}])
+     ] ++
+       if(not is_nil(chain_id),
+         do: [ABI.TypeEncoder.encode_raw([chain_id], [{:uint, 256}])],
+         else: []
+       ))
     |> Enum.join()
     |> Crypto.hash()
   end

@@ -40,7 +40,14 @@ defmodule OMG.TypedDataHash.Config do
     <<contract_addr::binary-size(20)>> = decode16!(contract_addr_hex)
     <<salt::binary-size(32)>> = decode16!(salt_hex)
 
-    Tools.domain_separator(name, version, contract_addr, salt)
+    %{
+      name: name,
+      version: version,
+      salt: salt,
+      verifyingContract: contract_addr,
+      chainId: nil
+    }
+    |> Tools.domain_separator()
   end
 
   defp decode16!("0x" <> data), do: decode16!(data)

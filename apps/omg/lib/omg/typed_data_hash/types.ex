@@ -20,6 +20,14 @@ defmodule OMG.TypedDataHash.Types do
 
   import OMG.TypedDataHash.SpecHelper
 
+  @type eip712_domain_t() :: %{
+          name: binary(),
+          version: binary(),
+          salt: OMG.Crypto.hash_t(),
+          verifyingContract: OMG.Crypto.address_t(),
+          chainId: pos_integer() | nil
+        }
+
   @eip_712_domain_spec [
     spec("name", "string"),
     spec("version", "string"),
@@ -34,23 +42,23 @@ defmodule OMG.TypedDataHash.Types do
   @input_spec [
     spec("blknum", "uint256"),
     spec("txindex", "uint256"),
-    spec("oindex", "uint256"),
+    spec("oindex", "uint256")
   ]
 
   @output_spec [
     spec("owner", "address"),
     spec("currency", "address"),
-    spec("amount", "uint256"),
+    spec("amount", "uint256")
   ]
 
-  def types_elem, do: [
-    types: %{
-      EIP712Domain: @eip_712_domain_spec,
-      Transaction: @tx_spec,
-      Input: @input_spec,
-      Output: @output_spec
-    },
-    primaryType: "Transaction"
-  ]
-
+  def types_elem,
+    do: [
+      types: %{
+        EIP712Domain: @eip_712_domain_spec,
+        Transaction: @tx_spec,
+        Input: @input_spec,
+        Output: @output_spec
+      },
+      primaryType: "Transaction"
+    ]
 end

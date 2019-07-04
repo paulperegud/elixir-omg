@@ -35,7 +35,8 @@ defmodule OMG.WatcherRPC.Web.Validators.TypedDataSignedTest do
     name: "OMG Network",
     version: "1",
     salt: <<0::256>>,
-    verifyingContract: @ari_network_address
+    verifyingContract: @ari_network_address,
+    chainId: nil
   }
 
   defp get_message do

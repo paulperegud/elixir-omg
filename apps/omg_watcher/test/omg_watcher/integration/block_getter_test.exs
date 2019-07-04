@@ -279,12 +279,17 @@ defmodule OMG.Watcher.Integration.BlockGetterTest do
     domainData = %{
       name: "OMG Network",
       version: "1",
-      # FIXME: don't hardcode this (for now taken from /home/user/sources/elixir-omg/apps/omg/lib/omg/typed_data_hash/config.ex)
-      verifyingContract: "0x7c276dcaab99bd16163c1bcce671cad6a1ec0945",
-      salt: "0xfad5c7f626d80f9256ef01929f3beb96e058b8b4b0e3fe52d84f054c0e2a7a83",
-      # FIXME: adding this is necessary for parity, see typed_data_hash/tools.ex
-      chainId: "0x1"
+      verifyingContract: alice.addr,
+      salt: OMG.DevCrypto.generate_private_key() |> elem(1),
+      # FIXME: adding this is necessary for parity (0x1)
+      chainId: 1
     }
+
+    domainDataParity =
+      domainData
+      |> Map.put_new(:skip_hex_encode, [:name, :version])
+      |> OMG.Utils.HttpRPC.Response.sanitize()
+      |> Map.put(:chainId, "0x1")
 
     test_typed_data = %{
       types: %{
@@ -293,7 +298,7 @@ defmodule OMG.Watcher.Integration.BlockGetterTest do
         Input: inputSpec,
         Output: outputSpec
       },
-      domain: domainData,
+      domain: domainDataParity,
       primaryType: "Transaction",
       message: %{
         input0: zero_input,
@@ -312,8 +317,16 @@ defmodule OMG.Watcher.Integration.BlockGetterTest do
     {:ok, sig_enc} = Ethereumex.HttpClient.request("personal_signTypedData", [test_typed_data, alice_enc, pass], [])
     sig = Eth.Encoding.from_hex(sig_enc)
 
-    assert %OMG.State.Transaction.Signed{sigs: [^sig]} =
+    # add chainId also in the domain type spec
+    domain_type_hash =
+      "EIP712Domain(string name,string version,address verifyingContract,bytes32 salt,uint256 chainId)"
+      |> OMG.Crypto.hash()
+
+    domain_separator = OMG.TypedDataHash.Tools.domain_separator(domainData, domain_type_hash)
+
+    assert sig ==
              OMG.State.Transaction.new([], [])
-             |> OMG.DevCrypto.sign([alice.priv])
+             |> OMG.TypedDataHash.hash_struct(domain_separator)
+             |> OMG.DevCrypto.signature_digest(alice.priv)
   end
 end
