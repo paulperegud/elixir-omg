@@ -29,6 +29,16 @@ defmodule OMG.Supervisor do
       {OMG.InternalEventBus, []},
       {OMG.EthereumClientMonitor, [alarm_module: Alarm]},
       {OMG.EthereumHeight, []}
+      {TelemetryMetricsStatsd,
+       [
+         metrics: [
+           counter("deposits.length", event_name: "depositor.events"),
+           counter("exits.in_flights.length", event_name: "in_flight_exit.events"),
+           counter("exits.piggybacks.length", event_name: "piggyback.events"),
+           counter("exits.length", event_name: "exiter.events"),
+         ],
+         formatter: :datadog
+       ]}
     ]
 
     opts = [strategy: :one_for_one]

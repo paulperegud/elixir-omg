@@ -121,8 +121,7 @@ defmodule OMG.EthereumEventListener do
       |> Core.get_events(sync_height)
 
     {:ok, db_updates_from_callback} = callbacks.process_events_callback.(events)
-    length_events = length(events)
-    if length(events) > 0, do: :telemetry.execute([service_name, :events], %{length: length_events})
+    Enum.map(Core.Metric.calculate(service_name, events), :telemetry.execute/2)
     :ok = OMG.DB.multi_update(db_updates ++ db_updates_from_callback)
     :ok = RootChainCoordinator.check_in(height_to_check_in, state.service_name)
 
