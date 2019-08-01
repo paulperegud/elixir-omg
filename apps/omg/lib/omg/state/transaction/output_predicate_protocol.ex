@@ -19,10 +19,26 @@ defmodule OMG.State.Transaction.OutputPredicateProtocol do
   Intended to be called in stateful validation
   """
 
+  alias OMG.Crypto
+  alias OMG.State.Transaction
+
   @doc """
   True if a particular witness can unlock a particular output to be spent, given being put in a particular transaction
   """
   def can_spend?(witness, output_spent, _raw_tx) when is_binary(witness) do
     output_spent.owner == witness
   end
+
+  # FIXME: here we could add checking of the exchange_addr versus the order signed by owner
+  def can_spend?(
+        {<<"output_type_is_deposit", payload_preimage::binary>> = preimage, exchange_addr},
+        input_utxo,
+        %Transaction.Settlement{}
+      )
+      when is_binary(preimage) and is_binary(exchange_addr) and exchange_addr == binary_part(payload_preimage, 0, 20) do
+    input_utxo.owner == preimage |> Crypto.hash() |> binary_part(0, 20)
+  end
+
+  def can_spend?({preimage, exchange_addr}, _, _) when is_binary(preimage) and is_binary(exchange_addr),
+    do: false
 end

@@ -219,12 +219,12 @@ defimpl OMG.State.Transaction.Protocol, for: OMG.State.Transaction.Payment do
             List.duplicate([@zero_address, @zero_address, 0], 4 - length(outputs))
         ] ++ if(metadata, do: [metadata], else: [])
 
-  def get_outputs(%Transaction.Payment{outputs: outputs}) do
+  def get_outputs(%{outputs: outputs}) do
     outputs
     |> Enum.reject(&match?(%{owner: @zero_address, currency: @zero_address, amount: 0}, &1))
   end
 
-  def get_inputs(%Transaction.Payment{inputs: inputs}) do
+  def get_inputs(%{inputs: inputs}) do
     inputs
     |> Enum.map(fn %{blknum: blknum, txindex: txindex, oindex: oindex} -> Utxo.position(blknum, txindex, oindex) end)
     |> Enum.filter(&Utxo.Position.non_zero?/1)
@@ -247,8 +247,8 @@ defimpl OMG.State.Transaction.Protocol, for: OMG.State.Transaction.Payment do
 
   Returns the fees that this transaction is paying, mapped by currency
   """
-  @spec can_apply?(Transaction.Payment.t(), list(Utxo.t())) :: {:ok, map()} | {:error, :amounts_do_not_add_up}
-  def can_apply?(%Transaction.Payment{} = tx, input_utxos) do
+  @spec can_apply?(map(), list(Utxo.t())) :: {:ok, map()} | {:error, :amounts_do_not_add_up}
+  def can_apply?(tx, input_utxos) do
     outputs = Transaction.get_outputs(tx)
 
     input_amounts_by_currency = get_amounts_by_currency(input_utxos)
@@ -261,7 +261,7 @@ defimpl OMG.State.Transaction.Protocol, for: OMG.State.Transaction.Payment do
   @doc """
   Effects of a payment transaction - spends all inputs and creates all outputs
   """
-  def get_effects(%Transaction.Payment{} = tx, blknum, tx_index) do
+  def get_effects(%{} = tx, blknum, tx_index) do
     new_utxos_map = tx |> non_zero_utxos_from(blknum, tx_index) |> Map.new()
     spent_input_pointers = Transaction.get_inputs(tx)
     {spent_input_pointers, new_utxos_map}

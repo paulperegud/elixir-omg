@@ -25,7 +25,8 @@ defmodule OMG.State.Transaction do
   require Utxo
 
   @payment_marker Transaction.Markers.payment()
-  @tx_types_modules %{@payment_marker => Transaction.Payment}
+  @settlement_marker Transaction.Markers.settlement()
+  @tx_types_modules %{@payment_marker => Transaction.Payment, @settlement_marker => Transaction.Settlement}
   @type_markers Map.keys(@tx_types_modules)
 
   @type any_flavor_t() :: __MODULE__.Signed.t() | __MODULE__.Recovered.t() | __MODULE__.Protocol.t()

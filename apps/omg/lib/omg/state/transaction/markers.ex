@@ -17,4 +17,5 @@ defmodule OMG.State.Transaction.Markers do
   Collection of binary markers to decode the transaction type
   """
   def payment, do: <<188, 97, 78>>
+  def settlement, do: <<1, 1, 1>>
 end
