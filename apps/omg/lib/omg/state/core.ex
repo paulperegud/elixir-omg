@@ -44,6 +44,7 @@ defmodule OMG.State.Core do
         }
 
   @type deposit() :: %{
+          rootchain_txhash: Crypto.address_t(),
           blknum: non_neg_integer(),
           currency: Crypto.address_t(),
           owner: Crypto.address_t(),

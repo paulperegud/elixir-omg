@@ -48,3 +48,8 @@ env/
 
 # Docker
 src/
+
+# intellij
+.idea
+*.iml
+

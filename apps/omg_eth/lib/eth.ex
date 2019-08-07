@@ -283,9 +283,10 @@ defmodule OMG.Eth do
     |> Map.new()
   end
 
-  defp common_parse_event(result, %{"blockNumber" => eth_height}) do
+  defp common_parse_event(result, %{"blockNumber" => eth_height, "transactionHash" => rootchain_txhash}) do
     result
     |> Map.put(:eth_height, int_from_hex(eth_height))
+    |> Map.put(:rootchain_txhash, from_hex(rootchain_txhash))
   end
 
   defp get_signer_passphrase("0x00a329c0648769a73afac7f9381e08fb43dbea72") do
