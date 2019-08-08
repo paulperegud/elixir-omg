@@ -93,9 +93,8 @@ defmodule OMG.State.Transaction.Payment do
       when is_metadata(metadata) and length(inputs) <= @max_inputs and length(outputs) <= @max_outputs do
     inputs =
       inputs
-      |> Enum.map(fn {blknum, txindex, oindex} -> %{blknum: blknum, txindex: txindex, oindex: oindex} end)
-
-    inputs = inputs ++ List.duplicate(%{blknum: 0, txindex: 0, oindex: 0}, @max_inputs - Kernel.length(inputs))
+      |> Enum.map(fn {blknum, txindex, oindex} -> Utxo.position(blknum, txindex, oindex) end)
+      |> Enum.filter(&Utxo.Position.non_zero?/1)
 
     outputs =
       outputs
@@ -125,10 +124,15 @@ defmodule OMG.State.Transaction.Payment do
   def reconstruct(_), do: {:error, :malformed_transaction}
 
   defp reconstruct_inputs(inputs_rlp) do
-    Enum.map(inputs_rlp, fn [blknum, txindex, oindex] ->
-      %{blknum: parse_int(blknum), txindex: parse_int(txindex), oindex: parse_int(oindex)}
+    inputs_rlp
+    |> Enum.map(fn [blknum, txindex, oindex] ->
+      Utxo.position(parse_int(blknum), parse_int(txindex), parse_int(oindex))
     end)
     |> inputs_without_gaps()
+    |> case do
+      {:ok, inputs} -> {:ok, Enum.filter(inputs, &Utxo.Position.non_zero?/1)}
+      other -> other
+    end
   rescue
     _ -> {:error, :malformed_inputs}
   end
@@ -165,7 +169,7 @@ defmodule OMG.State.Transaction.Payment do
   defp parse_address(_), do: {:error, :malformed_address}
 
   defp inputs_without_gaps(inputs),
-    do: check_for_gaps(inputs, %{blknum: 0, txindex: 0, oindex: 0}, {:error, :inputs_contain_gaps})
+    do: check_for_gaps(inputs, Utxo.position(0, 0, 0), {:error, :inputs_contain_gaps})
 
   defp outputs_without_gaps({:error, _} = error), do: error
 
@@ -217,7 +221,7 @@ defimpl OMG.State.Transaction.Protocol, for: OMG.State.Transaction.Payment do
           # TODO: commented code for the tx markers handling
           # @payment_marker,
           # contract expects 4 inputs and outputs
-          Enum.map(inputs, fn %{blknum: blknum, txindex: txindex, oindex: oindex} -> [blknum, txindex, oindex] end) ++
+          Enum.map(inputs, fn Utxo.position(blknum, txindex, oindex) -> [blknum, txindex, oindex] end) ++
             List.duplicate([0, 0, 0], 4 - length(inputs)),
           Enum.map(outputs, fn %{owner: owner, currency: currency, amount: amount} -> [owner, currency, amount] end) ++
             List.duplicate([@zero_address, @zero_address, 0], 4 - length(outputs))
@@ -231,11 +235,7 @@ defimpl OMG.State.Transaction.Protocol, for: OMG.State.Transaction.Payment do
     end)
   end
 
-  def get_inputs(%Transaction.Payment{inputs: inputs}) do
-    inputs
-    |> Enum.map(fn %{blknum: blknum, txindex: txindex, oindex: oindex} -> Utxo.position(blknum, txindex, oindex) end)
-    |> Enum.filter(&Utxo.Position.non_zero?/1)
-  end
+  def get_inputs(%Transaction.Payment{inputs: inputs}), do: inputs
 
   @doc """
   True if the witnessses provided follow some extra custom validation.

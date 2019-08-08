@@ -47,7 +47,6 @@ defmodule OMG.State.TransactionTest do
                )
 
   @empty_signature <<0::size(520)>>
-  @no_owner %{priv: <<>>, addr: nil}
 
   describe "hashing and metadata field" do
     test "create transaction with metadata" do
@@ -124,9 +123,7 @@ defmodule OMG.State.TransactionTest do
     } do
       [
         {[{1, 2, 3, alice}, {2, 3, 4, bob}], [{alice, @eth, 7}, {bob, @eth, 3}]},
-        {[{1, 2, 3, alice}, {0, 0, 0, @no_owner}], [{alice, @eth, 7}, {bob, @eth, 3}]},
-        {[{1, 2, 3, alice}, {2, 3, 4, bob}, {0, 0, 0, @no_owner}, {0, 0, 0, @no_owner}],
-         [{alice, @eth, 7}, {bob, @eth, 3}]}
+        {[{1, 2, 3, alice}], [{alice, @eth, 7}, {bob, @eth, 3}]}
       ]
       |> Enum.map(&parametrized_tester/1)
     end
@@ -328,16 +325,20 @@ defmodule OMG.State.TransactionTest do
   describe "formal protocol rules are enforced" do
     @tag fixtures: [:alice]
     test "Decoding transaction with gaps in inputs returns error", %{alice: alice} do
+      # can't use helpers and new here because they filter out zero inputs automatically
       assert {:error, :inputs_contain_gaps} ==
-               TestHelper.create_encoded([{0, 0, 0, alice}, {1000, 0, 0, alice}], @eth, [{alice, 100}])
+               %Transaction.Payment{inputs: [Utxo.position(0, 0, 0), Utxo.position(1, 0, 0)], outputs: []}
+               |> DevCrypto.sign([alice.priv, alice.priv])
+               |> Transaction.Signed.encode()
                |> Transaction.Recovered.recover_from()
 
       assert {:error, :inputs_contain_gaps} ==
-               TestHelper.create_encoded(
-                 [{1000, 0, 0, alice}, {0, 0, 0, alice}, {2000, 0, 0, alice}],
-                 @eth,
-                 [{alice, 100}]
-               )
+               %Transaction.Payment{
+                 inputs: [Utxo.position(2, 0, 0), Utxo.position(0, 0, 0), Utxo.position(1, 0, 0)],
+                 outputs: []
+               }
+               |> DevCrypto.sign([alice.priv, alice.priv, alice.priv])
+               |> Transaction.Signed.encode()
                |> Transaction.Recovered.recover_from()
 
       assert {:ok, _} =
