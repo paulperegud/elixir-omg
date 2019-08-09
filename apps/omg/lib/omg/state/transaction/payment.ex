@@ -19,6 +19,7 @@ defmodule OMG.State.Transaction.Payment do
       This module holds the representation of a "raw" transaction, i.e. without signatures nor recovered input spenders
   """
   alias OMG.Crypto
+  alias OMG.Output.FungibleMoreVPToken
   alias OMG.State.Transaction
   alias OMG.Utxo
 
@@ -94,18 +95,14 @@ defmodule OMG.State.Transaction.Payment do
     inputs =
       inputs
       |> Enum.map(fn {blknum, txindex, oindex} -> Utxo.position(blknum, txindex, oindex) end)
-      |> filter_non_zero()
+      |> filter_non_zero_inputs()
 
     outputs =
       outputs
-      |> Enum.map(fn {owner, currency, amount} -> %{owner: owner, currency: currency, amount: amount} end)
-
-    outputs =
-      outputs ++
-        List.duplicate(
-          %{owner: @zero_address, currency: @zero_address, amount: 0},
-          @max_outputs - Kernel.length(outputs)
-        )
+      |> Enum.map(fn {owner, currency, amount} ->
+        %FungibleMoreVPToken{owner: owner, currency: currency, amount: amount}
+      end)
+      |> filter_non_zero_outputs()
 
     %__MODULE__{inputs: inputs, outputs: outputs, metadata: metadata}
   end
@@ -126,13 +123,13 @@ defmodule OMG.State.Transaction.Payment do
   defp reconstruct_inputs(inputs_rlp) do
     with {:ok, inputs} <- parse_inputs(inputs_rlp),
          {:ok, inputs} <- inputs_without_gaps(inputs),
-         do: {:ok, filter_non_zero(inputs)}
+         do: {:ok, filter_non_zero_inputs(inputs)}
   end
 
   defp reconstruct_outputs(outputs_rlp) do
     with {:ok, outputs} <- parse_outputs(outputs_rlp),
          {:ok, outputs} <- outputs_without_gaps(outputs),
-         do: {:ok, outputs}
+         do: {:ok, filter_non_zero_outputs(outputs)}
   end
 
   defp reconstruct_metadata([]), do: {:ok, nil}
@@ -140,13 +137,6 @@ defmodule OMG.State.Transaction.Payment do
   defp reconstruct_metadata([_]), do: {:error, :malformed_metadata}
 
   defp parse_int!(binary), do: :binary.decode_unsigned(binary, :big)
-
-  # necessary, because RLP handles empty string equally to integer 0
-  @spec parse_address(<<>> | Crypto.address_t()) :: {:ok, Crypto.address_t()} | {:error, :malformed_address}
-  defp parse_address(binary)
-  defp parse_address(""), do: {:ok, <<0::160>>}
-  defp parse_address(<<_::160>> = address_bytes), do: {:ok, address_bytes}
-  defp parse_address(_), do: {:error, :malformed_address}
 
   defp parse_inputs(inputs_rlp) do
     {:ok, Enum.map(inputs_rlp, &parse_input!/1)}
@@ -163,13 +153,12 @@ defmodule OMG.State.Transaction.Payment do
     _ -> {:error, :malformed_outputs}
   end
 
-  defp filter_non_zero(inputs), do: Enum.filter(inputs, &Utxo.Position.non_zero?/1)
+  defp filter_non_zero_inputs(inputs), do: Enum.filter(inputs, &Utxo.Position.non_zero?/1)
 
-  defp parse_output!([owner, currency, amount]) do
-    with {:ok, cur12} <- parse_address(currency),
-         {:ok, owner} <- parse_address(owner),
-         do: %{owner: owner, currency: cur12, amount: parse_int!(amount)}
-  end
+  defp filter_non_zero_outputs(outputs),
+    do: Enum.reject(outputs, &match?(%{owner: @zero_address, currency: @zero_address, amount: 0}, &1))
+
+  defp parse_output!(output), do: FungibleMoreVPToken.from_rlp!(output)
 
   defp parse_input!([blknum, txindex, oindex]),
     do: Utxo.position(parse_int!(blknum), parse_int!(txindex), parse_int!(oindex))
@@ -183,7 +172,7 @@ defmodule OMG.State.Transaction.Payment do
     do:
       check_for_gaps(
         outputs,
-        %{owner: @zero_address, currency: @zero_address, amount: 0},
+        %FungibleMoreVPToken{owner: @zero_address, currency: @zero_address, amount: 0},
         {:error, :outputs_contain_gaps}
       )
 
@@ -229,18 +218,11 @@ defimpl OMG.State.Transaction.Protocol, for: OMG.State.Transaction.Payment do
           # contract expects 4 inputs and outputs
           Enum.map(inputs, fn Utxo.position(blknum, txindex, oindex) -> [blknum, txindex, oindex] end) ++
             List.duplicate([0, 0, 0], 4 - length(inputs)),
-          Enum.map(outputs, fn %{owner: owner, currency: currency, amount: amount} -> [owner, currency, amount] end) ++
+          Enum.map(outputs, &OMG.Output.to_rlp/1) ++
             List.duplicate([@zero_address, @zero_address, 0], 4 - length(outputs))
         ] ++ if(metadata, do: [metadata], else: [])
 
-  def get_outputs(%Transaction.Payment{outputs: outputs}) do
-    outputs
-    |> Enum.reject(&match?(%{owner: @zero_address, currency: @zero_address, amount: 0}, &1))
-    |> Enum.map(fn %{owner: owner, currency: currency, amount: amount} ->
-      %OMG.Output.FungibleMoreVPToken{owner: owner, currency: currency, amount: amount}
-    end)
-  end
-
+  def get_outputs(%Transaction.Payment{outputs: outputs}), do: outputs
   def get_inputs(%Transaction.Payment{inputs: inputs}), do: inputs
 
   @doc """

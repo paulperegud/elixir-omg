@@ -23,6 +23,7 @@ defmodule OMG.State.TransactionTest do
   use ExUnit.Case, async: true
 
   alias OMG.DevCrypto
+  alias OMG.Output.FungibleMoreVPToken
   alias OMG.State
   alias OMG.State.Transaction
   alias OMG.TestHelper
@@ -362,15 +363,28 @@ defmodule OMG.State.TransactionTest do
       no_account = %{addr: @zero_address}
 
       assert {:error, :outputs_contain_gaps} ==
-               TestHelper.create_encoded([{1000, 0, 0, alice}], @eth, [{no_account, 0}, {alice, 100}])
+               %Transaction.Payment{
+                 inputs: [],
+                 outputs: [
+                   %FungibleMoreVPToken{owner: no_account.addr, currency: @eth, amount: 0},
+                   %FungibleMoreVPToken{owner: alice.addr, currency: @eth, amount: 10}
+                 ]
+               }
+               |> DevCrypto.sign([])
+               |> Transaction.Signed.encode()
                |> Transaction.Recovered.recover_from()
 
       assert {:error, :outputs_contain_gaps} ==
-               TestHelper.create_encoded(
-                 [{1000, 0, 0, alice}],
-                 @eth,
-                 [{alice, 100}, {no_account, 0}, {alice, 100}]
-               )
+               %Transaction.Payment{
+                 inputs: [],
+                 outputs: [
+                   %FungibleMoreVPToken{owner: alice.addr, currency: @eth, amount: 10},
+                   %FungibleMoreVPToken{owner: no_account.addr, currency: @eth, amount: 0},
+                   %FungibleMoreVPToken{owner: alice.addr, currency: @eth, amount: 10}
+                 ]
+               }
+               |> DevCrypto.sign([])
+               |> Transaction.Signed.encode()
                |> Transaction.Recovered.recover_from()
 
       assert {:ok, _} =
