@@ -94,7 +94,7 @@ defmodule OMG.State.Transaction.Payment do
     inputs =
       inputs
       |> Enum.map(fn {blknum, txindex, oindex} -> Utxo.position(blknum, txindex, oindex) end)
-      |> Enum.filter(&Utxo.Position.non_zero?/1)
+      |> filter_non_zero()
 
     outputs =
       outputs
@@ -124,42 +124,22 @@ defmodule OMG.State.Transaction.Payment do
   def reconstruct(_), do: {:error, :malformed_transaction}
 
   defp reconstruct_inputs(inputs_rlp) do
-    inputs_rlp
-    |> Enum.map(fn [blknum, txindex, oindex] ->
-      Utxo.position(parse_int(blknum), parse_int(txindex), parse_int(oindex))
-    end)
-    |> inputs_without_gaps()
-    |> case do
-      {:ok, inputs} -> {:ok, Enum.filter(inputs, &Utxo.Position.non_zero?/1)}
-      other -> other
-    end
-  rescue
-    _ -> {:error, :malformed_inputs}
+    with {:ok, inputs} <- parse_inputs(inputs_rlp),
+         {:ok, inputs} <- inputs_without_gaps(inputs),
+         do: {:ok, filter_non_zero(inputs)}
   end
 
   defp reconstruct_outputs(outputs_rlp) do
-    outputs =
-      Enum.map(outputs_rlp, fn [owner, currency, amount] ->
-        with {:ok, cur12} <- parse_address(currency),
-             {:ok, owner} <- parse_address(owner) do
-          %{owner: owner, currency: cur12, amount: parse_int(amount)}
-        end
-      end)
-
-    if(error = Enum.find(outputs, &match?({:error, _}, &1)),
-      do: error,
-      else: outputs
-    )
-    |> outputs_without_gaps()
-  rescue
-    _ -> {:error, :malformed_outputs}
+    with {:ok, outputs} <- parse_outputs(outputs_rlp),
+         {:ok, outputs} <- outputs_without_gaps(outputs),
+         do: {:ok, outputs}
   end
 
   defp reconstruct_metadata([]), do: {:ok, nil}
   defp reconstruct_metadata([metadata]) when Transaction.is_metadata(metadata), do: {:ok, metadata}
   defp reconstruct_metadata([_]), do: {:error, :malformed_metadata}
 
-  defp parse_int(binary), do: :binary.decode_unsigned(binary, :big)
+  defp parse_int!(binary), do: :binary.decode_unsigned(binary, :big)
 
   # necessary, because RLP handles empty string equally to integer 0
   @spec parse_address(<<>> | Crypto.address_t()) :: {:ok, Crypto.address_t()} | {:error, :malformed_address}
@@ -167,6 +147,32 @@ defmodule OMG.State.Transaction.Payment do
   defp parse_address(""), do: {:ok, <<0::160>>}
   defp parse_address(<<_::160>> = address_bytes), do: {:ok, address_bytes}
   defp parse_address(_), do: {:error, :malformed_address}
+
+  defp parse_inputs(inputs_rlp) do
+    {:ok, Enum.map(inputs_rlp, &parse_input!/1)}
+  rescue
+    _ -> {:error, :malformed_inputs}
+  end
+
+  defp parse_outputs(outputs_rlp) do
+    outputs = Enum.map(outputs_rlp, &parse_output!/1)
+
+    with nil <- Enum.find(outputs, &match?({:error, _}, &1)),
+         do: {:ok, outputs}
+  rescue
+    _ -> {:error, :malformed_outputs}
+  end
+
+  defp filter_non_zero(inputs), do: Enum.filter(inputs, &Utxo.Position.non_zero?/1)
+
+  defp parse_output!([owner, currency, amount]) do
+    with {:ok, cur12} <- parse_address(currency),
+         {:ok, owner} <- parse_address(owner),
+         do: %{owner: owner, currency: cur12, amount: parse_int!(amount)}
+  end
+
+  defp parse_input!([blknum, txindex, oindex]),
+    do: Utxo.position(parse_int!(blknum), parse_int!(txindex), parse_int!(oindex))
 
   defp inputs_without_gaps(inputs),
     do: check_for_gaps(inputs, Utxo.position(0, 0, 0), {:error, :inputs_contain_gaps})
