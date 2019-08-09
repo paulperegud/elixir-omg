@@ -24,6 +24,8 @@ defmodule OMG.State.Transaction.Payment do
   alias OMG.State.Transaction
   alias OMG.Utxo
 
+  import __MODULE__.Tools
+
   require Transaction
   require Utxo
 
@@ -121,26 +123,10 @@ defmodule OMG.State.Transaction.Payment do
 
   def reconstruct(_), do: {:error, :malformed_transaction}
 
-  defp reconstruct_inputs(inputs_rlp) do
-    with {:ok, inputs} <- parse_inputs(inputs_rlp),
-         {:ok, inputs} <- inputs_without_gaps(inputs),
-         do: {:ok, filter_non_zero_inputs(inputs)}
-  end
-
   defp reconstruct_outputs(outputs_rlp) do
     with {:ok, outputs} <- parse_outputs(outputs_rlp),
          {:ok, outputs} <- outputs_without_gaps(outputs),
          do: {:ok, filter_non_zero_outputs(outputs)}
-  end
-
-  defp reconstruct_metadata([]), do: {:ok, nil}
-  defp reconstruct_metadata([metadata]) when Transaction.is_metadata(metadata), do: {:ok, metadata}
-  defp reconstruct_metadata([_]), do: {:error, :malformed_metadata}
-
-  defp parse_inputs(inputs_rlp) do
-    {:ok, Enum.map(inputs_rlp, &parse_input!/1)}
-  rescue
-    _ -> {:error, :malformed_inputs}
   end
 
   defp parse_outputs(outputs_rlp) do
@@ -151,8 +137,6 @@ defmodule OMG.State.Transaction.Payment do
   rescue
     _ -> {:error, :malformed_outputs}
   end
-
-  defp filter_non_zero_inputs(inputs), do: Enum.filter(inputs, &Utxo.Position.non_zero?/1)
 
   defp filter_non_zero_outputs(outputs),
     do: Enum.reject(outputs, &match?(%{owner: @zero_address, currency: @zero_address, amount: 0}, &1))
@@ -176,19 +160,6 @@ defmodule OMG.State.Transaction.Payment do
         %Output.FungibleMoreVPToken{owner: @zero_address, currency: @zero_address, amount: 0},
         {:error, :outputs_contain_gaps}
       )
-
-  # Check if any consecutive pair of elements contains empty followed by non-empty element
-  # which means there is a gap
-  defp check_for_gaps(items, empty, error) do
-    items
-    # discard - discards last unpaired element from a comparison
-    |> Stream.chunk_every(2, 1, :discard)
-    |> Enum.any?(fn
-      [^empty, elt] when elt != empty -> true
-      _ -> false
-    end)
-    |> if(do: error, else: {:ok, items})
-  end
 end
 
 defimpl OMG.State.Transaction.Protocol, for: OMG.State.Transaction.Payment do
