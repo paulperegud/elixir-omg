@@ -158,7 +158,7 @@ defmodule OMG.State.Transaction.Payment do
   defp filter_non_zero_outputs(outputs),
     do: Enum.reject(outputs, &match?(%{owner: @zero_address, currency: @zero_address, amount: 0}, &1))
 
-  defp parse_output!(output), do: FungibleMoreVPToken.from_rlp!(output)
+  defp parse_output!(output), do: FungibleMoreVPToken.reconstruct(output)
 
   defp parse_input!([blknum, txindex, oindex]),
     do: Utxo.position(parse_int!(blknum), parse_int!(txindex), parse_int!(oindex))
@@ -202,7 +202,8 @@ defimpl OMG.State.Transaction.Protocol, for: OMG.State.Transaction.Payment do
   @empty_signature <<0::size(520)>>
 
   # TODO: commented code for the tx markers handling
-  # @payment_marker Transaction.Markers.payment()
+  # TODO: dry wrt. Application.fetch_env!(:omg, :tx_types_modules)? Use `bimap` perhaps?
+  # @payment_marker <<188, 97, 78>>
   #
   # end commented code
 
@@ -218,7 +219,7 @@ defimpl OMG.State.Transaction.Protocol, for: OMG.State.Transaction.Payment do
           # contract expects 4 inputs and outputs
           Enum.map(inputs, fn Utxo.position(blknum, txindex, oindex) -> [blknum, txindex, oindex] end) ++
             List.duplicate([0, 0, 0], 4 - length(inputs)),
-          Enum.map(outputs, &OMG.Output.to_rlp/1) ++
+          Enum.map(outputs, &OMG.Output.Protocol.get_data_for_rlp/1) ++
             List.duplicate([@zero_address, @zero_address, 0], 4 - length(outputs))
         ] ++ if(metadata, do: [metadata], else: [])
 
