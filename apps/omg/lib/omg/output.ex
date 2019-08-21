@@ -35,7 +35,12 @@ defprotocol OMG.Output.Protocol do
   @doc """
   True if this particular output can and should be completely disregarded
   """
-  def is_zero?(output)
+  def can_be_forgotten_from_utxo_set?(output)
+
+  @doc """
+  Returns the input pointer that the output should be later referenced by in inputs to be spent
+  """
+  def input_pointer(output, blknum, tx_index, oindex, tx, hash)
 
   @doc """
   Transforms into a db-specific term
