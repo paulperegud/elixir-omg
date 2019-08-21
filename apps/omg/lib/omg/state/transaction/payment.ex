@@ -19,7 +19,8 @@ defmodule OMG.State.Transaction.Payment do
       This module holds the representation of a "raw" transaction, i.e. without signatures nor recovered input spenders
   """
   alias OMG.Crypto
-  alias OMG.Output.FungibleMoreVPToken
+  alias OMG.InputPointer
+  alias OMG.Output
   alias OMG.State.Transaction
   alias OMG.Utxo
 
@@ -100,7 +101,7 @@ defmodule OMG.State.Transaction.Payment do
     outputs =
       outputs
       |> Enum.map(fn {owner, currency, amount} ->
-        %FungibleMoreVPToken{owner: owner, currency: currency, amount: amount}
+        %Output.FungibleMoreVPToken{owner: owner, currency: currency, amount: amount}
       end)
       |> filter_non_zero_outputs()
 
@@ -136,8 +137,6 @@ defmodule OMG.State.Transaction.Payment do
   defp reconstruct_metadata([metadata]) when Transaction.is_metadata(metadata), do: {:ok, metadata}
   defp reconstruct_metadata([_]), do: {:error, :malformed_metadata}
 
-  defp parse_int!(binary), do: :binary.decode_unsigned(binary, :big)
-
   defp parse_inputs(inputs_rlp) do
     {:ok, Enum.map(inputs_rlp, &parse_input!/1)}
   rescue
@@ -158,10 +157,12 @@ defmodule OMG.State.Transaction.Payment do
   defp filter_non_zero_outputs(outputs),
     do: Enum.reject(outputs, &match?(%{owner: @zero_address, currency: @zero_address, amount: 0}, &1))
 
-  defp parse_output!(output), do: FungibleMoreVPToken.reconstruct(output)
+  # FIXME: here we predetermine the type of the created output in the creating transaction
+  #        I think this makes sense, but rethink later
+  defp parse_output!(output), do: Output.FungibleMoreVPToken.reconstruct(output)
 
-  defp parse_input!([blknum, txindex, oindex]),
-    do: Utxo.position(parse_int!(blknum), parse_int!(txindex), parse_int!(oindex))
+  # FIXME: worse: we predetermine the input_pointer type, this is most likely bad - how to dispatch here?
+  defp parse_input!(input_pointer), do: InputPointer.UtxoPosition.reconstruct(input_pointer)
 
   defp inputs_without_gaps(inputs),
     do: check_for_gaps(inputs, Utxo.position(0, 0, 0), {:error, :inputs_contain_gaps})
@@ -172,7 +173,7 @@ defmodule OMG.State.Transaction.Payment do
     do:
       check_for_gaps(
         outputs,
-        %FungibleMoreVPToken{owner: @zero_address, currency: @zero_address, amount: 0},
+        %Output.FungibleMoreVPToken{owner: @zero_address, currency: @zero_address, amount: 0},
         {:error, :outputs_contain_gaps}
       )
 
@@ -217,7 +218,9 @@ defimpl OMG.State.Transaction.Protocol, for: OMG.State.Transaction.Payment do
           # TODO: commented code for the tx markers handling
           # @payment_marker,
           # contract expects 4 inputs and outputs
-          Enum.map(inputs, fn Utxo.position(blknum, txindex, oindex) -> [blknum, txindex, oindex] end) ++
+          # FIXME: eh, hard-coded zero input-pointers and outputs. Either we can do sth about it or wait out to be handled
+          #        in a better way in the contract-side
+          Enum.map(inputs, &OMG.InputPointer.Protocol.get_data_for_rlp/1) ++
             List.duplicate([0, 0, 0], 4 - length(inputs)),
           Enum.map(outputs, &OMG.Output.Protocol.get_data_for_rlp/1) ++
             List.duplicate([@zero_address, @zero_address, 0], 4 - length(outputs))
