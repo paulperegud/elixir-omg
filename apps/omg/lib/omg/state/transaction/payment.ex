@@ -95,6 +95,14 @@ defmodule OMG.State.Transaction.Payment do
       inputs
       |> Enum.map(fn {blknum, txindex, oindex} -> Utxo.position(blknum, txindex, oindex) end)
       |> filter_non_zero_inputs()
+      # FIXME: faux calculation of input pointers
+      |> Enum.map(&Utxo.Position.encode/1)
+      |> Enum.map(&Integer.to_string/1)
+      |> Enum.map(&Crypto.hash/1)
+      |> Enum.map(&binary_part(&1, 0, 18))
+      |> Enum.zip(inputs)
+      |> Enum.map(fn {faux_hash, {_, _, oindex}} -> faux_hash <> <<oindex::size(2)-unit(8)>> end)
+      |> Enum.map(fn output_id -> %InputPointer.OutputId{id: output_id} end)
 
     outputs =
       outputs
@@ -159,7 +167,7 @@ defmodule OMG.State.Transaction.Payment do
   defp parse_output!(output), do: Output.FungibleMoreVPToken.reconstruct(output)
 
   # FIXME: worse: we predetermine the input_pointer type, this is most likely bad - how to dispatch here?
-  defp parse_input!(input_pointer), do: InputPointer.UtxoPosition.reconstruct(input_pointer)
+  defp parse_input!(input_pointer), do: InputPointer.OutputId.reconstruct(input_pointer)
 
   defp inputs_without_gaps(inputs),
     do: check_for_gaps(inputs, &InputPointer.Protocol.non_empty?/1, {:error, :inputs_contain_gaps})
@@ -214,7 +222,9 @@ defimpl OMG.State.Transaction.Protocol, for: OMG.State.Transaction.Payment do
           # FIXME: eh, hard-coded zero input-pointers and outputs. Either we can do sth about it or wait out to be handled
           #        in a better way in the contract-side
           Enum.map(inputs, &OMG.InputPointer.Protocol.get_data_for_rlp/1) ++
-            List.duplicate([0, 0, 0], 4 - length(inputs)),
+            List.duplicate("", 4 - length(inputs)),
+          # was
+          # List.duplicate([0, 0, 0], 4 - length(inputs)),
           Enum.map(outputs, &OMG.Output.Protocol.get_data_for_rlp/1) ++
             List.duplicate([@zero_address, @zero_address, 0], 4 - length(outputs))
         ] ++ if(metadata, do: [metadata], else: [])
