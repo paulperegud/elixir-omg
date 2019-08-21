@@ -29,8 +29,6 @@ defmodule OMG.State.Transaction.Payment do
 
   @default_metadata nil
 
-  @zero_address OMG.Eth.zero_address()
-
   defstruct [:inputs, :outputs, metadata: @default_metadata]
 
   @type t() :: %__MODULE__{
@@ -152,10 +150,9 @@ defmodule OMG.State.Transaction.Payment do
     _ -> {:error, :malformed_outputs}
   end
 
-  defp filter_non_zero_inputs(inputs), do: Enum.filter(inputs, &Utxo.Position.non_zero?/1)
+  defp filter_non_zero_inputs(inputs), do: Enum.filter(inputs, &InputPointer.Protocol.non_empty?/1)
 
-  defp filter_non_zero_outputs(outputs),
-    do: Enum.reject(outputs, &match?(%{owner: @zero_address, currency: @zero_address, amount: 0}, &1))
+  defp filter_non_zero_outputs(outputs), do: Enum.filter(outputs, &Output.Protocol.non_empty?/1)
 
   # FIXME: here we predetermine the type of the created output in the creating transaction
   #        I think this makes sense, but rethink later
@@ -165,26 +162,22 @@ defmodule OMG.State.Transaction.Payment do
   defp parse_input!(input_pointer), do: InputPointer.UtxoPosition.reconstruct(input_pointer)
 
   defp inputs_without_gaps(inputs),
-    do: check_for_gaps(inputs, Utxo.position(0, 0, 0), {:error, :inputs_contain_gaps})
+    do: check_for_gaps(inputs, &InputPointer.Protocol.non_empty?/1, {:error, :inputs_contain_gaps})
 
   defp outputs_without_gaps({:error, _} = error), do: error
 
   defp outputs_without_gaps(outputs),
-    do:
-      check_for_gaps(
-        outputs,
-        %Output.FungibleMoreVPToken{owner: @zero_address, currency: @zero_address, amount: 0},
-        {:error, :outputs_contain_gaps}
-      )
+    do: check_for_gaps(outputs, &Output.Protocol.non_empty?/1, {:error, :outputs_contain_gaps})
 
   # Check if any consecutive pair of elements contains empty followed by non-empty element
   # which means there is a gap
-  defp check_for_gaps(items, empty, error) do
+  defp check_for_gaps(items, is_non_empty_predicate, error) do
     items
+    |> Enum.map(is_non_empty_predicate)
     # discard - discards last unpaired element from a comparison
     |> Stream.chunk_every(2, 1, :discard)
     |> Enum.any?(fn
-      [^empty, elt] when elt != empty -> true
+      [false, true] -> true
       _ -> false
     end)
     |> if(do: error, else: {:ok, items})
