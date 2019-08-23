@@ -133,6 +133,7 @@ defmodule OMG.DB.LevelDB do
   def init(server_name, path), do: do_init(server_name, path)
 
   defp do_init(server_name, path) do
+    IO.inspect({server_name, path}, label: "≠≠≠≠≠≠≠≠≠≠≠≠≠≠")
     :ok = File.mkdir_p(path)
 
     with :ok <- server_name.init_storage(path),

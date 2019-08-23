@@ -85,7 +85,7 @@ defmodule OMG.State do
     # Our approach is simply blocking the supervision boot tree
     # until we've processed history.
     {:ok, utxos_query_result} = DB.utxos()
-    {:ok, height_query_result} = DB.get_single_value(:child_top_block_number)
+    {:ok, height_query_result} = DB.get_single_value(:child_top_block_number) |> IO.inspect(label: "state top block number")
     {:ok, last_deposit_query_result} = DB.get_single_value(:last_deposit_child_blknum)
     {:ok, [utxos_query_result, height_query_result, last_deposit_query_result], {:continue, :setup}}
   end

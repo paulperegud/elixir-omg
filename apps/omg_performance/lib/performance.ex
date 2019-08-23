@@ -209,6 +209,7 @@ defmodule OMG.Performance do
   defp run(args) do
     {:ok, data} = OMG.Performance.Runner.run(args)
     _ = Logger.info("#{inspect(data)}")
+    IO.puts("\e[41m #{inspect(data)} \e[0m ")
     :ok
   end
 

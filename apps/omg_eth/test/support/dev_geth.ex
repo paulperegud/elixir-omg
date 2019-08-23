@@ -33,7 +33,9 @@ defmodule OMG.Eth.DevGeth do
 
     geth_pid =
       launch(
-        "geth --dev --dev.period=1 --ws --wsorigins='*' --rpc --rpcapi=personal,eth,web3,admin --datadir #{homedir} 2>&1"
+        "geth --allow-insecure-unlock --dev --dev.period=1 --ws --wsorigins='*' --rpc --rpcapi=personal,eth,web3,admin --datadir #{
+          homedir
+        } 2>&1"
       )
 
     {:ok, :ready} = Eth.WaitFor.eth_rpc()

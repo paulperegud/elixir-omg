@@ -43,7 +43,7 @@ defmodule OMG.Watcher.Fixtures do
 
       config :omg_db, path: "#{db_path}"
       # this causes the inner test child chain server process to log debug. To see these logs adjust test's log level
-      config :logger, level: :debug
+      config :logger, level: :info
       config :omg_child_chain, fee_specs_file_name: "#{fee_file}"
     """)
     |> File.close()
@@ -109,8 +109,24 @@ defmodule OMG.Watcher.Fixtures do
   end
 
   defp log_output(prefix, line) do
-    Logger.debug("#{prefix}: " <> line)
-    line
+    #Logger.info("#{prefix}: " <> line)
+    prefix = "\e[45m" <> prefix <> "\e[0m"
+    try do
+      IO.write(prefix <> line)
+    rescue
+      _ -> 
+        line = prepare(line)
+        IO.puts("\e[41m(rescue)\e[0m"  <> prefix <> line)
+    catch 
+      _ -> 
+        line = prepare(line)
+        IO.puts("\e[41m(rescue)\e[0m"  <> prefix <> line)
+    end
+  end
+
+  def prepare(line) when is_binary(line) do
+    result = line  |> :binary.bin_to_list |> Enum.filter(fn ch -> ch < 128 end)
+    for i <- result, do: <<i::8>>, into: <<>>
   end
 
   deffixture watcher(db_initialized, root_chain_contract_config) do

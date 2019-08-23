@@ -74,11 +74,13 @@ defmodule OMG.DB do
 
   def init(path) do
     DeferredConfig.populate(:omg_db)
+    IO.inspect(path,label: "OMG.DB.init  path")
     driver().init(path)
   end
 
   def init do
     DeferredConfig.populate(:omg_db)
+    IO.inspect("no path",label: "OMG.DB.init")
     driver().init()
   end
 
@@ -120,8 +122,14 @@ defmodule OMG.DB do
 
   def child_top_block_number, do: driver().child_top_block_number
 
-  def get_single_value(parameter_name), do: driver().get_single_value(parameter_name)
-  def get_single_value(parameter_name, server), do: driver().get_single_value(parameter_name, server)
+  def get_single_value(parameter_name) do 
+    driver().get_single_value(parameter_name)
+    |> IO.inspect(label: " get single value #{parameter_name}")
+  end
+  def get_single_value(parameter_name, server) do 
+    driver().get_single_value(parameter_name, server)
+     |> IO.inspect(label: " (server) get single value #{parameter_name}")
+  end
 
   @doc """
   A list of all atoms that we use as single-values stored in the database (i.e. markers/flags of all kinds)

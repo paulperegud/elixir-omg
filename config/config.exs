@@ -10,13 +10,47 @@ use Mix.Config
 import_config "../apps/*/config/config.exs"
 
 # Sample configuration (overrides the imported configuration above):
-
-config :logger, level: :info
+config :logger, level: :debug
 
 config :logger, :console,
-  format: "$date $time [$level] $metadata⋅$message⋅\n",
+  level: :debug,
+  #format: "$date $time [$level] $metadata⋅$message⋅\n",
+  format: {OMG.Utils.LoggerExt, :format},
   discard_threshold: 2000,
-  metadata: [:module, :function, :request_id, :trace_id, :span_id]
+  metadata: [:module, :function, :line, :file, :request_id],
+  remove_module: [
+    ":telemetry32",
+    "OMG.RootChainCoordinator",
+    "Plug.Logger",
+    "OMG.Eth.DevNode",
+    "OMG.Eth.DevGeth",
+    "OMG.Performance.SenderServer",
+    "OMG.Watcher.HttpRPC.Adapter",
+    "OMG.Watcher.BlockGetter:239",
+    "OMG.Watcher.ExitProcessor:(432|444|456|467|465)",
+    "Ecto.Adapters.SQL:809.*\n.*\n.*\n.*source=\"txoutputs\"",
+    "Phoenix.Logger:157.*\n.*Controller.Status.*\n.*get_status",
+    "Phoenix.Logger:157.*\n.*Controller.Utxo.*\n.*get_utxo_exit",
+    "OMG.Eth.EthereumHeight:55"
+    #         "Phoenix.Logger",
+  #     ":application_controller",
+  #  "OMG,Watcher.Web.Controller.Utxo",
+    #        "BlockQueue.Core", 
+    #         "API.FeeChecker",
+    #         "FreshBlocks",
+    #         "BlockQueue",
+    #         "Plug.Logger",
+    #         "Ecto.LogEntry",
+    #         "OMG.DB", 
+    #         "OMG.API.RootChainCoordinator", 
+    #     "OMG.Watcher.BlockGetter",
+    #     "OMG.Watcher.DB",
+  #   "Watcher.Fixtures", 
+    #     "Eth.DevGeth", 
+  #  "BlockQueue.Server","Ecto.","Plug.Logger",
+    #    "OMG.API.EthereumEventListener",
+    #    "Performance.SenderServer"
+  ] |> Enum.join("|")
 
 config :logger,
   backends: [:console]

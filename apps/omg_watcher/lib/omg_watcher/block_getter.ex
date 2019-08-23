@@ -76,6 +76,7 @@ defmodule OMG.Watcher.BlockGetter do
     # which causes State and BlockGetter to reboot, fetches entire UTXO set again, and then timeout...
     _ = :sys.get_status(ExitProcessor, 10 * 60_000)
     exit_processor_initial_results = ExitProcessor.check_validity()
+    IO.inspect(child_top_block_number, label: "child_top_block_number OMG.Watcher.BlockGetter.handle_continue \n")
 
     {:ok, state} =
       Core.init(

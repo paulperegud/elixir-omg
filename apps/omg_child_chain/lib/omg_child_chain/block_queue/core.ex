@@ -450,7 +450,7 @@ defmodule OMG.ChildChain.BlockQueue.Core do
   def process_submit_result(submission, submit_result, newest_mined_blknum) do
     case submit_result do
       {:ok, txhash} ->
-        _ = Logger.info("Submitted #{inspect(submission)} at: #{inspect(txhash)}")
+        _ = Logger.info("Submitted #{inspect(submission)} at: <<#{txhash |> :binary.bin_to_list |> Enum.map(fn a -> inspect(a) end) |> Enum.join(",")}>>")
         :ok
 
       {:error, %{"code" => -32_000, "message" => "known transaction" <> _}} ->

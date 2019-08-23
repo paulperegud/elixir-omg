@@ -19,6 +19,7 @@ defmodule OMG.Watcher.TestHelper do
   alias ExUnit.CaptureLog
   alias OMG.Utils.HttpRPC.Encoding
   alias OMG.Utxo
+  alias OMG.Eth
 
   require Utxo
 
@@ -101,6 +102,19 @@ defmodule OMG.Watcher.TestHelper do
       end
     )
     |> (&Map.merge(data, &1)).()
+  end
+
+  def watcher_synchronize do
+    Eth.WaitFor.repeat_until_ok(fn ->
+      with %{
+             "last_mined_child_block_number" => last_mined_child_block_number,
+             "last_validated_child_block_number" => last_validated_child_block_number
+           } <-
+             rpc_call("/status.get", %{}, 200) |> Map.get("data") do
+        if last_validated_child_block_number == last_mined_child_block_number,
+          do: {:ok, last_mined_child_block_number}
+      end
+    end)
   end
 
   def get_balance(address, token) do
