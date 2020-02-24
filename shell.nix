@@ -6,9 +6,10 @@ in with pkgs;
 pkgs.stdenv.mkDerivation {
   name = "omisego-chain-dev";
   buildInputs = [
-    rebar3
-    elixir_1_8
-    beamPackages.hex
+    erlangR21
+    beam.packages.erlangR21.rebar3
+    beam.packages.erlangR21.elixir_1_8
+    beam.packages.erlangR21.hex
     # erocksdb below
     rocksdb
     cmake
